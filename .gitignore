@@ -1,0 +1,17 @@
+# wygenerowane fonty
+out/*.ttf
+out/*.png
+out/*.html
+
+# zbudowane binaria
+glowforge_app
+scripts/headroom
+scripts/rejestracja_trwala
+
+# srodowisko
+.venv/
+
+# smieci systemowe
+.DS_Store
+__pycache__/
+*.pyc

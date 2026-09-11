@@ -1,0 +1,15 @@
+#!/bin/bash
+# Launcher glowforge. Szuka srodowiska z fontTools i Pillow.
+set -e
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+for PY in "$HERE/.venv/bin/python3" "$HOME/web_hdr/.venv/bin/python3"; do
+    if [ -x "$PY" ]; then exec "$PY" "$HERE/glowforge.py" "$@"; fi
+done
+if python3 -c "import fontTools, PIL" 2>/dev/null; then
+    exec python3 "$HERE/glowforge.py" "$@"
+fi
+echo "brak srodowiska z fontTools i Pillow" >&2
+echo "utworz je:" >&2
+echo "  python3 -m venv $HERE/.venv" >&2
+echo "  $HERE/.venv/bin/pip install fonttools Pillow" >&2
+exit 1
