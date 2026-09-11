@@ -18,7 +18,7 @@ Użycie:
 import os
 import sys
 
-from PIL import Image, ImageDraw, ImageFilter, ImageFont
+from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont
 
 # Rozmiary wymagane przez iconutil (nazwy plików tworzy funkcja niżej)
 ROZMIARY = [16, 32, 64, 128, 256, 512, 1024]
@@ -28,8 +28,12 @@ MARGINES = 100
 BOK = 824
 PROMIEN = 185
 
-# Kolejne warstwy poświaty: (promień rozmycia, krycie)
-POSWIATA = [(90, 120), (48, 130), (20, 140)]
+# Kolejne warstwy poświaty: (promień rozmycia, krycie, barwa).
+# Zewnętrzna chłodna, wewnętrzna biała — dzięki temu poświata ma głębię
+# zamiast być jednolitym rozmyciem.
+POSWIATA = [(110, 165, (140, 185, 255)),
+            (52, 160, (190, 215, 255)),
+            (20, 150, (255, 255, 255))]
 
 
 def czcionka(rozmiar):
@@ -48,43 +52,61 @@ def czcionka(rozmiar):
 
 
 def rysuj(rozmiar=1024):
+    """Kompozycja wzorowana na ikonie Font Booka: zaokrąglony kwadrat
+    z dużą literą w dolnej części. Dwie zmiany: litera to G, a tło jest
+    ciemne — na jasnym poświata nie ma gdzie błysnąć, bo brak kontrastu."""
     s = float(rozmiar) / 1024.0
     img = Image.new("RGBA", (rozmiar, rozmiar), (0, 0, 0, 0))
 
-    # --- tło: zaokrąglony kwadrat z delikatnym gradientem
     bok = max(2, int(BOK * s))
     m = int(MARGINES * s)
     promien = int(PROMIEN * s)
 
+    # --- tło: ciemny gradient, jaśniejszy u góry (efekt szkła)
     tlo = Image.new("RGBA", (bok, bok), (0, 0, 0, 0))
     td = ImageDraw.Draw(tlo)
     for y in range(bok):
         t = y / max(1, bok - 1)
-        # prawie czarny u góry, granatowy u dołu
         td.line([(0, y), (bok, y)],
-                fill=(int(9 + 16 * t), int(9 + 18 * t), int(15 + 30 * t), 255))
+                fill=(int(30 - 22 * t), int(33 - 24 * t), int(44 - 31 * t), 255))
 
     maska = Image.new("L", (bok, bok), 0)
-    ImageDraw.Draw(maska).rounded_rectangle(
-        [0, 0, bok - 1, bok - 1], radius=promien, fill=255)
+    md = ImageDraw.Draw(maska)
+    md.rounded_rectangle([0, 0, bok - 1, bok - 1], radius=promien, fill=255)
     img.paste(tlo, (m, m), maska)
 
-    # --- litera: warstwa ostra + warstwy rozmyte jako poświata
-    tekst = "G"
-    f = czcionka(int(540 * s))
+    # delikatna jasna krawędź u góry — takiego drobiazgu używa Apple.
+    # Wygaszamy ją ku dołowi, żeby wyglądała jak odblask, a nie obwódka.
+    krawedz = Image.new("RGBA", (bok, bok), (0, 0, 0, 0))
+    ImageDraw.Draw(krawedz).rounded_rectangle(
+        [0, 0, bok - 1, bok - 1], radius=promien,
+        outline=(255, 255, 255, 110), width=max(1, int(3 * s)))
+    wygaszenie = Image.new("L", (bok, bok), 0)
+    wd2 = ImageDraw.Draw(wygaszenie)
+    for y in range(bok):
+        t = y / max(1, bok - 1)
+        wd2.line([(0, y), (bok, y)], fill=int(255 * max(0.0, 1.0 - 2.4 * t)))
+    krawedz.putalpha(ImageChops.multiply(krawedz.getchannel("A"), wygaszenie))
+    img.alpha_composite(krawedz, (m, m))
 
+    # --- litera G, jak „a" w Font Booku: duża, w dolnej części, na środku.
+    # Proporcje zmierzone z oryginału: litera zajmuje ~49% wysokości
+    # zawartości, a jej środek wypada na ~0,68 wysokości.
+    f = czcionka(int(490 * s))
     warstwa = Image.new("RGBA", (rozmiar, rozmiar), (0, 0, 0, 0))
     wd = ImageDraw.Draw(warstwa)
-    # Pogrubienie przez obrys — cienka litera gubi się przy 16 px.
-    wd.text((rozmiar // 2, rozmiar // 2), tekst, font=f,
+    wd.text((rozmiar // 2, m + int(0.66 * bok)), "G", font=f,
             fill=(255, 255, 255, 255),
-            stroke_width=max(0, int(26 * s)),
+            stroke_width=max(0, int(22 * s)),
             stroke_fill=(255, 255, 255, 255),
             anchor="mm")
 
-    for r, alfa in POSWIATA:
+    # --- poświata: warstwy rozmyte coraz mocniej, z lekkim chłodnym odcieniem
+    for r, alfa, barwa in POSWIATA:
         rozmyta = warstwa.filter(ImageFilter.GaussianBlur(max(1, int(r * s))))
-        # przygaszamy warstwę rozmyta, zeby nie zjadła tła
+        rozmyta = Image.composite(
+            Image.new("RGBA", rozmyta.size, barwa + (255,)), rozmyta,
+            rozmyta.getchannel("A"))
         a = rozmyta.getchannel("A").point(lambda v: int(v * alfa / 255.0))
         rozmyta.putalpha(a)
         img.alpha_composite(rozmyta)
