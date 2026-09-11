@@ -145,6 +145,8 @@ profiles/pq-bt2020.icc  profil BT.2100 PQ używany w trybie iccp
 scripts/headroom.swift  ile zapasu EDR ma teraz ekran
 scripts/rejestracja_trwala.swift
                         rejestracja fontu widoczna dla całego systemu
+scripts/ikona_systemowa.swift
+                        jaką ikonę system naprawdę pokazuje dla pakietu
 docs/                   opis techniczny
 out/                    wygenerowane fonty
 ```

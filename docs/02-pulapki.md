@@ -348,3 +348,54 @@ to zainstaluje" to dwie różne rzeczy.
 
 W krzywej PQ biel SDR to **kod 148**, nie 255. 255 to 10 000 cd/m². Jeśli
 widzisz w płynie obrazu wartość 255 i myślisz „to biały" — to jest 49× bieli.
+
+## H. Ikona pakietu `.app`
+
+### `SetFile -a C` ustawia „własną ikonę" i właśnie ją psuje
+
+Nazwa tej flagi brzmi jak coś, czego się chce: *element ma własną ikonę*.
+W praktyce znaczy ona **„ikonę znajdziesz w pliku `Icon\r` w środku tego
+katalogu"**. Jeśli tego pliku nie ma, Finder nie ma czego pokazać — i zamiast
+sięgnąć po `CFBundleIconFile`, pokazuje **zwykły niebieski folder**.
+
+Pakiet wygląda wtedy na kompletnie zepsuty, choć jest bez zarzutu:
+
+| kontrola | wynik |
+|---|---|
+| `CFBundleIconFile` w `Info.plist` | `AppIcon` — poprawnie |
+| plik `.icns` obecny | tak, 507 KB |
+| `iconutil` rozkłada go z powrotem | 10 rozmiarów, wszystkie zgodne |
+| `sips` czyta | `1024 x 1024, format: icns` |
+| `codesign -v` | `valid on disk` |
+| **`xattr`** | **`com.apple.FinderInfo` ← jedyna różnica** |
+
+Usunięcie atrybutu natychmiast przywraca ikonę — bez przebudowy, bez
+wylogowania, bez czyszczenia cache:
+
+```bash
+/usr/bin/SetFile -a c Foo.app     # mała litera = zdejmij flagę
+xattr Foo.app                     # powinno zostać tylko com.apple.provenance
+```
+
+Dlatego `build_app.sh` **zdejmuje** tę flagę zamiast ją ustawiać. Instrukcja
+„ustaw `-a C`, żeby odświeżyć ikonę", krąży po internecie, ale dla pakietu
+bez pliku `Icon\r` jest po prostu sabotażem.
+
+### Test, który mówi „działa", gdy nie działa
+
+Pierwsza wersja sondy porównywała zwróconą ikonę z generyczną ikoną
+**aplikacji** i wobec braku zgodności ogłaszała sukces. Tymczasem system
+zwracał generyczny **folder** — czyli zupełnie inny obraz, więc test uznał to
+za „naszą własną ikonę".
+
+Trzeba porównywać z **oboma** wzorcami i powiedzieć, który pasuje:
+
+| zwrócony obraz | znaczenie |
+|---|---|
+| generyczna ikona aplikacji | system nie widzi `CFBundleIconFile` |
+| generyczna ikona folderu | pakiet brany za katalog — patrz flaga wyżej |
+| żaden z powyższych | własna ikona faktycznie działa |
+
+To ten sam schemat, co w punkcie A: **test, który nie potrafi odróżnić awarii
+od sukcesu, jest gorszy od braku testu.** Sonda `scripts/ikona_systemowa.swift`
+sprawdza jedno i drugie — i flagę, i faktycznie renderowany obraz.

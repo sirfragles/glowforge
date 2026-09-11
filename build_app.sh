@@ -70,7 +70,12 @@ codesign --force --deep --sign - "$APP" 2>/dev/null || \
 
 echo "4/5  odświeżenie ikony w Finderze"
 touch "$APP"
-/usr/bin/SetFile -a C "$APP" 2>/dev/null || true
+# UWAGA: tutaj wcześniej było SetFile -a C, czyli „ten element ma własną
+# ikonę". Ta flaga każe Finderowi szukać pliku Icon\r W ŚRODKU pakietu,
+# a gdy go tam nie ma — przestaje czytać CFBundleIconFile i pokazuje
+# zwykły niebieski folder. Ustawianie jej to sabotaż własnej ikony.
+# Zdejmujemy ją na wszelki wypadek, gdyby została po starym budowaniu.
+/usr/bin/SetFile -a c "$APP" 2>/dev/null || true
 
 echo "5/5  gotowe: $APP"
 
@@ -79,6 +84,7 @@ if [ "$1" = "--install" ]; then
     mkdir -p "$CEL"
     rm -rf "$CEL/GlowForge.app"
     cp -R "$APP" "$CEL/"
+    /usr/bin/SetFile -a c "$CEL/GlowForge.app" 2>/dev/null || true
     touch "$CEL/GlowForge.app"
     echo
     echo "zainstalowane: $CEL/GlowForge.app"
