@@ -130,7 +130,7 @@ func fileSizeMB(_ path: String) -> Double {
 }
 
 /// Dziennik zdarzen. Bez tego nie ma jak dojsc, co zawiodlo w GUI.
-let LOGCEST = ("~/web_hdr/glowforge_app.log" as NSString).expandingTildeInPath
+let LOGCEST = REPO + "/glowforge_app.log"
 func loguj(_ s: String) {
     let linia = s + "\n"
     if let h = FileHandle(forWritingAtPath: LOGCEST) {

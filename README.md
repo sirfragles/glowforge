@@ -32,12 +32,17 @@ cd ~/glowforge
 Aplikacja z podglądem na żywo:
 
 ```bash
-swiftc -O glowforge_app.swift -o glowforge_app
-./glowforge_app
+./build_app.sh --install        # pakiet z ikoną + instalacja w ~/Applications
+open ~/Applications/GlowForge.app
 ```
 
 Lista 372 fontów, pole na własny tekst, suwak jasności 1–16×, podgląd na żywo
-i instalacja jednym przyciskiem.
+i instalacja jednym przyciskiem. `build_app.sh` bez `--install` zostawia
+pakiet w repozytorium.
+
+Gotowy pakiet `.app` jest potrzebny, żeby aplikacja trafiła do **Launchpadu**
+— sam plik wykonywalny tam nie trafi, bo system czyta ikonę i metadane tylko
+z katalogu z `Info.plist`.
 
 ---
 
@@ -134,6 +139,8 @@ rodzina, odmiana, PostScript, plik, tabele koloru.
 glowforge.py            konwerter (fontTools + Pillow)
 glowforge               launcher, szuka środowiska z zależnościami
 glowforge_app.swift     aplikacja z podglądem EDR
+build_app.sh            buduje GlowForge.app (ikona + pakiet)
+tools/make_icon.py      generuje ikonę programowo
 profiles/pq-bt2020.icc  profil BT.2100 PQ używany w trybie iccp
 scripts/headroom.swift  ile zapasu EDR ma teraz ekran
 scripts/rejestracja_trwala.swift
@@ -152,7 +159,7 @@ Python 3 z `fontTools` i `Pillow`, oraz Swift do aplikacji.
 python3 -m venv .venv
 .venv/bin/pip install fonttools Pillow
 
-swiftc -O glowforge_app.swift -o glowforge_app
+./build_app.sh                  # kompiluje aplikację i buduje pakiet
 swiftc -O scripts/headroom.swift -o scripts/headroom
 swiftc -O scripts/rejestracja_trwala.swift -o scripts/rejestracja_trwala
 ```

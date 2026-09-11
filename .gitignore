@@ -3,10 +3,15 @@ out/*.ttf
 out/*.png
 out/*.html
 
-# zbudowane binaria
+# zbudowane binaria i pakiet aplikacji
+build/
+GlowForge.app/
 glowforge_app
 scripts/headroom
 scripts/rejestracja_trwala
+
+# dziennik aplikacji
+glowforge_app.log
 
 # srodowisko
 .venv/
