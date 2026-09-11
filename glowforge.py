@@ -45,7 +45,22 @@ import zlib
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = HERE
 DEFAULT_PROFILE = os.path.join(ROOT, "profiles", "pq-bt2020.icc")
-OUTDIR = os.path.join(ROOT, "out")
+# Domyslnie „out" obok skryptu. W pakiecie .app skrypt lezy w Zasobach,
+# ktore sa tylko do czytania, wiec aplikacja wskazuje miejsce zapisywalne
+# przez GLOWFORGE_OUT (patrz ~/Library/Application Support/GlowForge).
+OUTDIR = os.environ.get("GLOWFORGE_OUT") or os.path.join(ROOT, "out")
+
+# Katalog serwowany przez HTTP. Przy uruchomieniu z pakietu pliki powstaja
+# w katalogu roboczym, a nie obok skryptu, wiec i korzen serwera sie zmienia.
+SERVE_ROOT = (os.path.dirname(OUTDIR.rstrip(os.sep))
+              if os.environ.get("GLOWFORGE_OUT") else ROOT)
+
+# Katalog wyjsciowy tworzymy od razu: w pakiecie .app wskazuje na
+# ~/Library/Application Support/GlowForge/out i moze jeszcze nie istniec.
+try:
+    os.makedirs(OUTDIR, exist_ok=True)
+except OSError:
+    pass
 
 FONT_DIRS = [
     os.path.join(os.path.expanduser("~"), "Library", "Fonts"),
@@ -852,9 +867,10 @@ def cmd_preview(args):
                  .replace("__FACES__", "\n".join(faces))
                  .replace("__SECTIONS__", "\n".join(sections)))
     print("zapisane: %s" % out)
-    print("otworz  : http://127.0.0.1:%d/%s" % (args.port, os.path.relpath(out, ROOT)))
+    print("otworz  : http://127.0.0.1:%d/%s" % (args.port, os.path.relpath(out, SERVE_ROOT)))
     if args.open:
-        os.system('open "http://127.0.0.1:%d/%s"' % (args.port, os.path.relpath(out, ROOT)))
+        os.system('open "http://127.0.0.1:%d/%s"'
+                  % (args.port, os.path.relpath(out, SERVE_ROOT)))
     return 0
 
 
@@ -864,10 +880,11 @@ def cmd_serve(args):
     import http.server
     import socketserver
 
-    handler = functools.partial(http.server.SimpleHTTPRequestHandler, directory=ROOT)
+    handler = functools.partial(http.server.SimpleHTTPRequestHandler, directory=SERVE_ROOT)
     socketserver.TCPServer.allow_reuse_address = True
     with socketserver.TCPServer(("127.0.0.1", args.port), handler) as httpd:
-        print("serwer: http://127.0.0.1:%d/  ->  %s   (Ctrl-C konczy)" % (args.port, ROOT))
+        print("serwer: http://127.0.0.1:%d/  ->  %s   (Ctrl-C konczy)"
+              % (args.port, SERVE_ROOT))
         try:
             httpd.serve_forever()
         except KeyboardInterrupt:

@@ -9,6 +9,10 @@ GlowForge.app/
 glowforge_app
 scripts/headroom
 scripts/rejestracja_trwala
+scripts/ikona_systemowa
+
+# obrazy dyskowe z wydania
+dist/
 
 # dziennik aplikacji
 glowforge_app.log

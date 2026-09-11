@@ -46,6 +46,26 @@ z katalogu z `Info.plist`.
 
 ---
 
+## Wydanie
+
+Wypchnięcie taga buduje pakiet i pakuje go w obraz `.dmg`:
+
+```bash
+./make_dmg.sh                  # dist/GlowForge-<wersja>.dmg
+./make_dmg.sh 1.2.3            # wymuś numer
+```
+
+GitHub Actions robi to samo przy tagu `v*` i dołącza obraz do wydania.
+Szczegóły — co workflow sprawdza i czego wydanie **nie** rozwiązuje —
+w [docs/04-wydanie.md](docs/04-wydanie.md).
+
+Dwie rzeczy, o których trzeba wiedzieć zawczasu: obraz jest **tylko dla
+Apple Silicon** (Swift nie ma `Float16` na x86_64, a aplikacja go używa),
+a konwerter w środku potrzebuje Pythona z `fontTools` i `Pillow`, bo pakiet
+zawiera skrypty, nie interpreter.
+
+---
+
 ## Jak to działa, w trzech zdaniach
 
 Font wektorowy **nie niesie koloru** — glif to sam kształt, a o kolorze decyduje
@@ -140,6 +160,7 @@ glowforge.py            konwerter (fontTools + Pillow)
 glowforge               launcher, szuka środowiska z zależnościami
 glowforge_app.swift     aplikacja z podglądem EDR
 build_app.sh            buduje GlowForge.app (ikona + pakiet)
+make_dmg.sh             pakuje pakiet w obraz .dmg do wydania
 tools/make_icon.py      generuje ikonę programowo
 profiles/pq-bt2020.icc  profil BT.2100 PQ używany w trybie iccp
 scripts/headroom.swift  ile zapasu EDR ma teraz ekran
@@ -147,8 +168,10 @@ scripts/rejestracja_trwala.swift
                         rejestracja fontu widoczna dla całego systemu
 scripts/ikona_systemowa.swift
                         jaką ikonę system naprawdę pokazuje dla pakietu
+.github/workflows/      wydanie: budowa i .dmg przy wypchnięciu taga
 docs/                   opis techniczny
 out/                    wygenerowane fonty
+dist/                   obrazy .dmg z wydania
 ```
 
 ---
@@ -177,6 +200,7 @@ Launcher sam znajdzie `.venv` w repozytorium.
 | [docs/01-mechanizm.md](docs/01-mechanizm.md) | dlaczego font nie niesie koloru i jak `sbix` to obchodzi |
 | [docs/02-pulapki.md](docs/02-pulapki.md) | pułapki, na które się nabrałem — z dowodami |
 | [docs/03-edr-i-panel.md](docs/03-edr-i-panel.md) | strona ekranu: zapas EDR, jasność, APL |
+| [docs/04-wydanie.md](docs/04-wydanie.md) | wydanie: co robi workflow i czego nie rozwiązuje |
 
 ---
 

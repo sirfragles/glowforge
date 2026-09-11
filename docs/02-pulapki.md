@@ -399,3 +399,86 @@ Trzeba porównywać z **oboma** wzorcami i powiedzieć, który pasuje:
 To ten sam schemat, co w punkcie A: **test, który nie potrafi odróżnić awarii
 od sukcesu, jest gorszy od braku testu.** Sonda `scripts/ikona_systemowa.swift`
 sprawdza jedno i drugie — i flagę, i faktycznie renderowany obraz.
+
+## I. Wydawanie pakietu
+
+### Ścieżka zaszyta na sztywno działa na jednym komputerze
+
+Aplikacja szukała konwertera tak:
+
+```swift
+for k in ["~/glowforge", "~/web_hdr/glowforge"] { ... }
+```
+
+Na maszynie autora trafiała za każdym razem. W pakiecie `.app` pobranym
+z wydania nie ma ani katalogu domowego autora, ani tym bardziej `~/glowforge`
+— więc nie trafiała nigdy i nie było po czym poznać, że to ścieżka, bo
+aplikacja po prostu nie robiła nic.
+
+Lekcja ogólniejsza: **kod, który zależy od `$HOME` autora, przechodzi
+wszystkie testy u autora.** Dlatego workflow sprawdza samowystarczalność na
+maszynie, która nie ma ani jednego z tych katalogów — to jedyny uczciwy test.
+
+Rozwiązanie: konwerter jedzie w `Contents/Resources/glowforge/`, aplikacja
+szuka najpierw tam, a pliki robocze trafiają do
+`~/Library/Application Support/GlowForge/` — bo Zasoby pakietu są tylko do
+czytania i zapis do nich unieważnia podpis.
+
+### `minos` bierze się z maszyny, która buduje
+
+Bez jawnego `-target` kompilator wpisuje w binarkę **wersję systemu, na którym
+akurat pracuje**:
+
+```
+$ vtool -show-build GlowForge.app/Contents/MacOS/GlowForge
+    minos 27.0                    <- macOS maszyny budującej
+$ plutil -extract LSMinimumSystemVersion raw .../Info.plist
+    12.0                          <- to, co obiecuje plik
+```
+
+Plik kłamał, a dwa wydania zbudowane na różnych runnerach wymagałyby różnych
+systemów. Trzeba przypiąć jedno i drugie do tej samej wartości.
+
+Uwaga praktyczna: ten sam `-target` trzeba powtórzyć przy sprawdzaniu, bo
+inaczej mierzy się coś innego, niż się myśli.
+
+### Dwa skrypty liczące wersję osobno zawsze się rozjadą
+
+`build_app.sh` miał `1.0` wpisane na sztywno, a `make_dmg.sh` brał
+`git describe`. W repozytorium bez tagów wychodziło:
+
+| | |
+|---|---|
+| w `Info.plist` | `1.0` |
+| nazwa pliku | `GlowForge-0fe6163.dmg` |
+
+Numer wersji musi mieć **jedno źródło**. `make_dmg.sh` czyta go teraz
+z już zbudowanego pakietu, więc nazwa pliku nie może się rozjechać z tym,
+co jest w środku.
+
+### `Float16` nie istnieje na x86_64
+
+```
+glowforge_app.swift:376:41: error: cannot convert value of type 'Int'
+to expected argument type 'Float16'
+```
+
+To nie jest błąd w kodzie. `[Float16](repeating: 0, count: n)` jest poprawne,
+ale Swift **nie udostępnia `Float16` na x86_64** — więc literał `0` nie ma
+się do czego dopasować i kompilator zgłasza brak konwersji z `Int`. Błąd
+wskazuje na linię, w której wszystko jest w porządku.
+
+Sprawdzone dla `arm64-apple-macos12.0` (działa) i `x86_64-apple-macos12.0`,
+`13.0`, `14.0` (zawsze to samo). Wniosek: ten kod nie zbuduje się na Intela
+i żadne przełączniki tego nie zmienią. Trzeba albo się na to zgodzić, albo
+zastąpić `Float16` ręcznym składaniem połówek.
+
+### `hdiutil attach` nie mówi, czego nie znalazł
+
+```
+hdiutil: attach failed - No such file or directory
+```
+
+Gdy plik `.dmg` nie istnieje, komunikat nie podaje nazwy — a wygląda
+identycznie jak błąd montowania. Warto wpisać ścieżkę do zmiennej i wypisać
+ją przed montowaniem, zamiast szukać problemu w obrazie.

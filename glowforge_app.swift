@@ -21,19 +21,59 @@ let CONTENT_W = 1600
 let CONTENT_H = 900
 let MARGIN: CGFloat = 70
 
-// Repozytorium moze lezec w roznych miejscach — szukamy glowforge.py,
-// zeby dalo sie uruchomic aplikacje zarowno z ~/glowforge, jak i ze
-// starego ~/web_hdr/glowforge bez przerabiania sciezek.
+// Gdzie lezy konwerter. Wczesniej byla tu zaszyta sciezka ~/glowforge, co
+// dzialalo dokladnie na jednym komputerze na swiecie: w pakiecie .app
+// pobranym z wydania nie ma ani katalogu domowego autora, ani tym bardziej
+// tego katalogu. Kolejnosc od najwazniejszego:
+//   1. GLOWFORGE_HOME — gdy ktos swiadomie wskaze miejsce,
+//   2. kopia w pakiecie — tak dziala wydanie w DMG,
+//   3. repozytorium dewelopera — gdy aplikacje uruchamia sie z zrodel.
 let REPO: String = {
-    for k in ["~/glowforge", "~/web_hdr/glowforge"] {
-        let p = (k as NSString).expandingTildeInPath
-        if FileManager.default.fileExists(atPath: p + "/glowforge.py") { return p }
+    var kandydaci: [String] = []
+    if let z = ProcessInfo.processInfo.environment["GLOWFORGE_HOME"], !z.isEmpty {
+        kandydaci.append((z as NSString).expandingTildeInPath)
     }
-    return ("~/glowforge" as NSString).expandingTildeInPath
+    // W pakiecie to jest Zawartosc/Resources/glowforge. Przy zwyklym pliku
+    // wykonywalnym resourcePath to katalog z binarka, wiec ten kandydat
+    // po prostu nie przejdzie testu istnienia glowforge.py.
+    if let zas = Bundle.main.resourcePath { kandydaci.append(zas + "/glowforge") }
+    kandydaci.append(("~/glowforge" as NSString).expandingTildeInPath)
+    kandydaci.append(("~/web_hdr/glowforge" as NSString).expandingTildeInPath)
+    for p in kandydaci where FileManager.default.fileExists(atPath: p + "/glowforge.py") {
+        return p
+    }
+    return kandydaci.last!
 }()
 let FORGE = REPO + "/glowforge"
-let TMPFONT = REPO + "/out/_podglad.ttf"
+
+// Katalog na pliki robocze. NIE moze lezec w pakiecie: pakiet jest tylko do
+// czytania, a przy podpisie zapis do niego uniewaznia sygnature.
+let DOM: String = {
+    let b = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        .appendingPathComponent("GlowForge", isDirectory: true)
+    try? FileManager.default.createDirectory(at: b, withIntermediateDirectories: true)
+    return b.path
+}()
+let OUT = DOM + "/out"
+let TMPFONT = OUT + "/_podglad.ttf"
 let INSTALLDIR = ("~/Library/Fonts" as NSString).expandingTildeInPath
+try? FileManager.default.createDirectory(atPath: OUT, withIntermediateDirectories: true)
+
+// Tryb diagnostyczny: wypisz, skad bierzemy konwerter, i wyjdz. Bez tego
+// sprawdzenie, czy wydany pakiet jest samowystarczalny, wymaga uruchamiania
+// okna i patrzenia w dziennik — a to trzeba zrobic na kazdej maszynie innej
+// niz maszyna autora, czyli dokladnie tam, gdzie nie ma jak debuggowac.
+if CommandLine.arguments.contains("--sciezki") {
+    let fm = FileManager.default
+    print("konwerter : \(REPO)")
+    print("launcher  : \(FORGE)")
+    print("            \(fm.isExecutableFile(atPath: FORGE) ? "wykonywalny" : "BRAK LUB BEZ PRAWA WYKONANIA")")
+    print("skrypt    : \(fm.fileExists(atPath: REPO + "/glowforge.py") ? "jest" : "BRAK")")
+    print("profil    : \(fm.fileExists(atPath: REPO + "/profiles/pq-bt2020.icc") ? "jest" : "BRAK")")
+    print("roboczy   : \(DOM)")
+    print("wyjsciowy : \(OUT)  \(fm.isWritableFile(atPath: OUT) ? "zapisywalny" : "TYLKO DO CZYTANIA")")
+    exit(0)
+}
 
 // Nazwa fontu podglądowego MUSI być unikalna. Gdyby była taka sama jak fontu
 // już zainstalowanego w systemie, rejestracja w procesie kończy się konfliktem
@@ -75,6 +115,11 @@ func runForge(_ args: [String]) -> (Int32, String) {
     let p = Process()
     p.executableURL = URL(fileURLWithPath: FORGE)
     p.arguments = args
+    // Konwerter domyslnie pisze do out/ obok siebie. W pakiecie to katalog
+    // tylko do czytania, wiec wskazujemy mu miejsce zapisywalne.
+    var env = ProcessInfo.processInfo.environment
+    env["GLOWFORGE_OUT"] = OUT
+    p.environment = env
     let pipe = Pipe()
     p.standardOutput = pipe
     p.standardError = pipe
@@ -130,7 +175,8 @@ func fileSizeMB(_ path: String) -> Double {
 }
 
 /// Dziennik zdarzen. Bez tego nie ma jak dojsc, co zawiodlo w GUI.
-let LOGCEST = REPO + "/glowforge_app.log"
+/// Lezy razem z plikami roboczymi, a nie w pakiecie — z tego samego powodu.
+let LOGCEST = DOM + "/glowforge_app.log"
 func loguj(_ s: String) {
     let linia = s + "\n"
     if let h = FileHandle(forWritingAtPath: LOGCEST) {
@@ -141,6 +187,15 @@ func loguj(_ s: String) {
         try? linia.write(toFile: LOGCEST, atomically: true, encoding: .utf8)
     }
     print(s)
+}
+
+/// Na starcie zapisujemy, skad wzielismy konwerter i gdzie piszemy.
+/// Bez tego diagnoza „nie dziala" sprowadza sie do zgadywania, a to
+/// najczestsza przyczyna marnowania czasu w tym projekcie.
+func zapiszSciezki() {
+    loguj("[sciezki] konwerter:  \(REPO)")
+    loguj("[sciezki] roboczy:    \(DOM)")
+    loguj("[sciezki] zainstalowane fonty: \(INSTALLDIR)")
 }
 
 // ===========================================================================
@@ -669,6 +724,7 @@ btn.target = actions
 btn.action = #selector(Actions.install(_:))
 
 // --- start: wczytaj liste fontow
+zapiszSciezki()
 DispatchQueue.global().async {
     let list = loadFaces()
     DispatchQueue.main.async {

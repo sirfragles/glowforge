@@ -1,0 +1,119 @@
+name: wydanie
+
+# Buduje GlowForge.app i pakuje go w obraz .dmg.
+#
+# Wypchniecie taga (v1.2.3) buduje i dolacza .dmg do wydania na GitHubie.
+# Uruchomienie recznie z zakladki Actions tez buduje, ale zostawia .dmg
+# tylko jako artefakt do pobrania.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      wersja:
+        description: "Numer wersji bez v (pusty = z taga, a przy recznym uruchomieniu 0.0.0-sha)"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+jobs:
+  dmg:
+    # macos-14 to pierwszy runner Apple Silicon. Reszta jest na Intelu,
+    # a tam ten kod sie nie skompiluje — patrz komentarz o Float16
+    # w build_app.sh.
+    runs-on: macos-14
+
+    steps:
+      - name: Pobierz kod
+        uses: actions/checkout@v4
+        with:
+          # git describe potrzebuje tagow, a checkout domyslnie klonuje plytko
+          fetch-depth: 0
+
+      - name: Ustal wersje
+        run: |
+          W="${{ github.event.inputs.wersja }}"
+          if [ -z "$W" ]; then W="${GITHUB_REF_NAME#v}"; fi
+          if [ -z "$W" ] || [ "$W" = "main" ]; then
+            W="0.0.0-$(git rev-parse --short HEAD)"
+          fi
+          echo "GLOWFORGE_WERSJA=$W" >> "$GITHUB_ENV"
+          echo "wersja: $W"
+
+      - name: Srodowisko Pythona
+        # Pillow rysuje ikone, fontTools konwertuje fonty. Oba trafiaja do
+        # .venv w repozytorium — build_app.sh szuka go dokladnie tam.
+        run: |
+          python3 -m venv .venv
+          .venv/bin/pip install --quiet --upgrade pip
+          .venv/bin/pip install --quiet fonttools Pillow
+
+      - name: Zbuduj pakiet
+        run: ./build_app.sh
+
+      - name: Sprawdz, ze pakiet jest samowystarczalny
+        # Runner nie ma ani ~/glowforge, ani ~/web_hdr/glowforge. Jest wiec
+        # dokladnie tym komputerem, na ktorym wydany pakiet ma dzialac —
+        # i jedynym miejscem, gdzie da sie to sprawdzic bez zgadywania.
+        run: |
+          WY=$(./GlowForge.app/Contents/MacOS/GlowForge --sciezki)
+          echo "$WY"
+          echo "$WY" | grep -q "Contents/Resources/glowforge" \
+            || { echo "::error::pakiet szuka konwertera poza soba"; exit 1; }
+          echo "$WY" | grep -q "skrypt    : jest" \
+            || { echo "::error::brak glowforge.py w pakiecie"; exit 1; }
+          echo "$WY" | grep -q "profil    : jest" \
+            || { echo "::error::brak profilu PQ w pakiecie"; exit 1; }
+          echo "$WY" | grep -q "zapisywalny" \
+            || { echo "::error::katalog wyjsciowy nie jest zapisywalny"; exit 1; }
+
+      - name: Sprawdz wersje systemu w binarce
+        # Bez -target kompilator wpisuje w binarke wersje runnera. Ma byc
+        # zgodna z LSMinimumSystemVersion, inaczej plist klamie.
+        run: |
+          MINOS=$(vtool -show-build ./GlowForge.app/Contents/MacOS/GlowForge \
+                  | awk '/minos/{print $2}')
+          PLIST=$(plutil -extract LSMinimumSystemVersion raw \
+                  ./GlowForge.app/Contents/Info.plist)
+          echo "binarka wymaga: $MINOS   plist obiecuje: $PLIST"
+          [ "$MINOS" = "$PLIST" ] \
+            || { echo "::error::binarka i Info.plist nie zgadzaja sie"; exit 1; }
+
+      - name: Konwersja na probe
+        run: |
+          Z=./GlowForge.app/Contents/Resources/glowforge/glowforge
+          "$Z" list --query Monaco --tsv | head -3
+          "$Z" convert Monaco --boost 8 --name TestWydania --charset ascii --ppem 40
+          ls -la "$HOME/Library/Application Support/GlowForge/out/"
+
+      - name: Zbuduj DMG
+        run: ./make_dmg.sh
+
+      - name: Zajrzyj do srodka DMG
+        run: |
+          mkdir -p /tmp/gf
+          hdiutil attach dist/*.dmg -nobrowse -mountpoint /tmp/gf
+          ls -la /tmp/gf
+          test -x /tmp/gf/GlowForge.app/Contents/MacOS/GlowForge \
+            || { hdiutil detach /tmp/gf; echo "::error::brak binarki w DMG"; exit 1; }
+          test -f /tmp/gf/GlowForge.app/Contents/Resources/glowforge/glowforge.py \
+            || { hdiutil detach /tmp/gf; echo "::error::brak konwertera w DMG"; exit 1; }
+          hdiutil detach /tmp/gf
+
+      - name: Artefakt
+        uses: actions/upload-artifact@v4
+        with:
+          name: GlowForge-dmg
+          path: dist/*.dmg
+          if-no-files-found: error
+
+      - name: Wydanie
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: GlowForge ${{ env.GLOWFORGE_WERSJA }}
+          files: dist/*.dmg
+          generate_release_notes: true
