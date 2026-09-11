@@ -68,6 +68,12 @@ miejscem, gdzie samowystarczalność da się sprawdzić bez zgadywania.
 | `convert` na próbę | że konwersja faktycznie przechodzi, a nie tylko startuje |
 | zajrzenie do DMG | że obraz zawiera binarkę i konwerter |
 
+Krok z konwersją tworzy środowisko Pythona **tam, gdzie wskazuje instrukcja
+z obrazu, i tymi samymi poleceniami** co użytkownik. Pierwsze uruchomienie
+tego kroku tak właśnie poległo: CI budowało `.venv` w repozytorium, a launcher
+z pakietu szuka go w katalogu danych użytkownika. Instrukcja była poprawna,
+ale nic jej nie sprawdzało — dopiero wykonanie jej dosłownie to pokazało.
+
 Dwa ostatnie pytają o **skutek**, nie o zamiar. To ta sama zasada, co przy
 sprawdzaniu czcionek: lista zainstalowanych rzeczy bywa nieaktualna, więc
 trzeba sprawdzić, czy da się jej użyć.

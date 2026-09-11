@@ -43,13 +43,14 @@ jobs:
           echo "GLOWFORGE_WERSJA=$W" >> "$GITHUB_ENV"
           echo "wersja: $W"
 
-      - name: Srodowisko Pythona
-        # Pillow rysuje ikone, fontTools konwertuje fonty. Oba trafiaja do
-        # .venv w repozytorium — build_app.sh szuka go dokladnie tam.
+      - name: Srodowisko Pythona do zbudowania ikony
+        # Pillow rysuje ikone. To srodowisko obok skryptu, w repozytorium —
+        # build_app.sh szuka go dokladnie tam. Do konwersji fontow sluzy
+        # inne, w katalogu danych uzytkownika; patrz nastepny krok.
         run: |
           python3 -m venv .venv
           .venv/bin/pip install --quiet --upgrade pip
-          .venv/bin/pip install --quiet fonttools Pillow
+          .venv/bin/pip install --quiet Pillow
 
       - name: Zbuduj pakiet
         run: ./build_app.sh
@@ -83,11 +84,22 @@ jobs:
             || { echo "::error::binarka i Info.plist nie zgadzaja sie"; exit 1; }
 
       - name: Konwersja na probe
+        # Ten krok robi dokladnie to, co musi zrobic uzytkownik: tworzy
+        # srodowisko tam, gdzie wskazuje instrukcja z obrazu, i tymi samymi
+        # poleceniami. Jesli instrukcja jest bledna albo launcher szuka
+        # w innym miejscu — dowiemy sie tutaj, a nie od uzytkownika.
+        # Pierwsze uruchomienie tego kroku wlasnie tak wyszlo: CI tworzylo
+        # .venv w repozytorium, a launcher z pakietu szuka go w katalogu
+        # danych uzytkownika.
         run: |
-          Z=./GlowForge.app/Contents/Resources/glowforge/glowforge
-          "$Z" list --query Monaco --tsv | head -3
-          "$Z" convert Monaco --boost 8 --name TestWydania --charset ascii --ppem 40
-          ls -la "$HOME/Library/Application Support/GlowForge/out/"
+          D="$HOME/Library/Application Support/GlowForge"
+          python3 -m venv "$D/.venv"
+          "$D/.venv/bin/pip" install --quiet --upgrade pip
+          "$D/.venv/bin/pip" install --quiet fonttools Pillow
+          K=./GlowForge.app/Contents/Resources/glowforge/glowforge
+          "$K" list --query Monaco --tsv | head -3
+          "$K" convert Monaco --boost 8 --name TestWydania --charset ascii --ppem 40
+          ls -la "$D/out/"
 
       - name: Zbuduj DMG
         run: ./make_dmg.sh
